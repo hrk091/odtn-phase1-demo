@@ -86,7 +86,7 @@ class App extends Component {
         right: '',
       },
       message: '',
-      messageColor: green[600],
+      messageColor: green[ 600 ],
       open: false,
     }
     this.appRefList = range( 8 ).map( () => createRef() )
@@ -99,8 +99,8 @@ class App extends Component {
   }
 
   updateResource = () => {
-    getResources().then( ([ devices, connectivityServices ]) => {
-      console.log(connectivityServices)
+    getResources().then( ( [ devices, connectivityServices ] ) => {
+      console.log( connectivityServices )
       const portMap = this.getPortMap( devices )
       const network = Object.values( portMap ).map( this.setupGraph )
       this.setState( {
@@ -138,30 +138,52 @@ class App extends Component {
   getAssociatedConnectivity = ( uuid ) => {
     let oppositePortUuid = null
     let connectivitySrv = null
-    this.state.connectivityServices.forEach(srv => {
+    this.state.connectivityServices.forEach( srv => {
       let isTarget = false
-      srv['end-point'].forEach(ep => {
-        const epUuid = ep['service-interface-point']['service-interface-point-uuid']
-        if(uuid === epUuid){
+      srv[ 'end-point' ].forEach( ep => {
+        const epUuid = ep[ 'service-interface-point' ][ 'service-interface-point-uuid' ]
+        if ( uuid === epUuid ) {
           connectivitySrv = srv
           isTarget = true
         }
-      })
-      if(isTarget){
-        oppositePortUuid = srv['end-point'].filter(ep => {
-          const epUuid = ep['service-interface-point']['service-interface-point-uuid']
+      } )
+      if ( isTarget ) {
+        oppositePortUuid = srv[ 'end-point' ].filter( ep => {
+          const epUuid = ep[ 'service-interface-point' ][ 'service-interface-point-uuid' ]
           return epUuid !== uuid
-        })[0]['service-interface-point']['service-interface-point-uuid']
+        } )[ 0 ][ 'service-interface-point' ][ 'service-interface-point-uuid' ]
       }
-    })
+    } )
     return [ connectivitySrv, oppositePortUuid ]
+  }
+
+  checkRequest = ( leftUuid, rightUuid ) => {
+    const portMap = this.getPortMap( this.state.devices )
+
+    const getPosition = ( uuid ) => {
+      let position = null
+      Object.entries( portMap ).forEach( ( [ idx, ports ] ) => {
+        const exist = ports.filter( port => port.sipId === uuid ).length === 1
+        if ( exist ) {
+          position = idx
+        }
+      } )
+      if ( position === null ) {
+        throw Error( 'Port not found' )
+      }
+      return position
+    }
+
+    if ( getPosition( leftUuid ) !== getPosition( rightUuid ) ) {
+      throw Error( 'Invalid request' )
+    }
   }
 
   setupGraph = ( ports, idx ) => {
 
     // predefined port
     const nodes = ports
-      .filter(port => port.isClient || !port.isEven)
+      .filter( port => port.isClient || !port.isEven )
       .map( port => {
         const [ x, y ] = getPosition( port )
         return {
@@ -203,26 +225,26 @@ class App extends Component {
         return
       }
 
-      const [ connectivitySrv, oppositePortUuid ] = this.getAssociatedConnectivity(port.sipId)
-      if(!connectivitySrv){
+      const [ connectivitySrv, oppositePortUuid ] = this.getAssociatedConnectivity( port.sipId )
+      if ( !connectivitySrv ) {
         return
       }
-      const oppositePort = ports.filter(port => port.sipId === oppositePortUuid)[0]
+      const oppositePort = ports.filter( port => port.sipId === oppositePortUuid )[ 0 ]
 
-      console.log(ports.filter(_port => !_port.isClient && _port.element === port.element))
-      console.log(ports.filter(_port => !_port.isClient && _port.element === oppositePort.element))
-      internalEdges.push({
+      console.log( ports.filter( _port => !_port.isClient && _port.element === port.element ) )
+      console.log( ports.filter( _port => !_port.isClient && _port.element === oppositePort.element ) )
+      internalEdges.push( {
         from: port.id,
-        to: ports.filter(_port => !_port.isClient && _port.element === port.element)[0].id
-      })
+        to: ports.filter( _port => !_port.isClient && _port.element === port.element )[ 0 ].id,
+      } )
 
-      internalEdges.push({
+      internalEdges.push( {
         from: oppositePort.id,
-        to: ports.filter(_port => !_port.isClient && _port.element === oppositePort.element)[0].id
-      })
-    })
+        to: ports.filter( _port => !_port.isClient && _port.element === oppositePort.element )[ 0 ].id,
+      } )
+    } )
 
-    const edges = externalEdges.concat(internalEdges)
+    const edges = externalEdges.concat( internalEdges )
 
     const data = {
       nodes: new DataSet( nodes ),
@@ -251,56 +273,76 @@ class App extends Component {
 
   handleCreate = () => {
     const { left, right } = this.state.request
-    createConnectivityService(left, right)
-      .then(json => {
-        const message = DEBUG ? JSON.stringify(json) : 'Create ConnectivityService completed.'
+    try {
+      this.checkRequest( left, right )
+    }catch(err){
+      this.setState( {
+        message: err.message,
+        messageColor: red[ 600 ],
+      } )
+      return
+    }
+
+    createConnectivityService( left, right )
+      .then( json => {
+        const message = DEBUG ? JSON.stringify( json ) : 'Create ConnectivityService completed.'
         this.setState( {
           message,
-          messageColor: green[600],
+          messageColor: green[ 600 ],
         } )
-        setTimeout(this.updateResource, 1000)
-      })
-      .catch(err => {
-        console.error(err)
+        setTimeout( this.updateResource, 1000 )
+      } )
+      .catch( err => {
+        console.error( err )
         this.setState( {
           message: 'Error',
-          messageColor: red[600],
-        })
-      })
+          messageColor: red[ 600 ],
+        } )
+      } )
   }
 
   handleDelete = () => {
     const { left, right } = this.state.request
-    const [ connectivitySrv, clientPortUuid ] = this.getAssociatedConnectivity(left)
-    if(clientPortUuid !== right){
-      const message = 'Connectivity Service not found.'
+    try {
+      this.checkRequest( left, right )
+    }catch(err){
       this.setState( {
-        message
+        message: err.message,
+        messageColor: red[ 600 ],
       } )
       return
     }
-    deleteConnectivityServices(connectivitySrv.uuid)
-      .then(json => {
+
+    const [ connectivitySrv, clientPortUuid ] = this.getAssociatedConnectivity( left )
+    if ( clientPortUuid !== right ) {
+      const message = 'Connectivity Service not found.'
+      this.setState( {
+        message,
+      } )
+      return
+    }
+    deleteConnectivityServices( connectivitySrv.uuid )
+      .then( json => {
         const message = 'Delete ConnectivityService completed.'
         this.setState( {
           message,
-          messageColor: green[600],
+          messageColor: green[ 600 ],
         } )
-        setTimeout(this.updateResource, 1000)
-      })
-      .catch(err => {
-        console.error(err)
+        setTimeout( this.updateResource, 1000 )
+      } )
+      .catch( err => {
+        console.error( err )
         this.setState( {
           message: 'Error',
-          messageColor: red[600],
+          messageColor: red[ 600 ],
         } )
-      })
+      } )
   }
 
   handleSnackClose = () => {
-    this.setState({
-      message: ''
-    })
+    this.setState( {
+      message: '',
+    } )
   }
 
 
@@ -364,7 +406,7 @@ class App extends Component {
             </Grid>
 
             <Grid item xs={ 2 }>
-              <Button variant="contained" className={ classes.button } onClick={this.handleCreate}>
+              <Button variant="contained" className={ classes.button } onClick={ this.handleCreate }>
                 Create
                 { /* This Button uses a Font Icon, see the installation instructions in the docs. */ }
                 <SendIcon className={ classes.rightIcon }/>
@@ -372,7 +414,7 @@ class App extends Component {
             </Grid>
 
             <Grid item xs={ 2 }>
-              <Button variant="contained" className={ classes.button } onClick={this.handleDelete}>
+              <Button variant="contained" className={ classes.button } onClick={ this.handleDelete }>
                 Delete
                 { /* This Button uses a Font Icon, see the installation instructions in the docs. */ }
                 <DeleteIcon className={ classes.rightIcon }/>
@@ -404,20 +446,20 @@ class App extends Component {
           <Grid item xs={ 2 }/>
         </Grid>
         <Snackbar
-          anchorOrigin={{
+          anchorOrigin={ {
             vertical: 'top',
             horizontal: 'right',
-          }}
-          open={Boolean(this.state.message)}
-          autoHideDuration={4000}
-          onClose={this.handleSnackClose}
-          ContentProps={{
+          } }
+          open={ Boolean( this.state.message ) }
+          autoHideDuration={ 4000 }
+          onClose={ this.handleSnackClose }
+          ContentProps={ {
             'aria-describedby': 'message-id',
-          }}
+          } }
         >
           <SnackbarContent
-            style={{backgroundColor: this.state.messageColor}}
-            message={this.state.message}
+            style={ { backgroundColor: this.state.messageColor } }
+            message={ this.state.message }
           />
         </Snackbar>
       </div>
